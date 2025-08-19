@@ -59,20 +59,8 @@ PUBLIC_DIR = Path("public")
 DEFAULT_PATH = PUBLIC_DIR / "Hospital-Encounters-Test-Data.xlsx"
 
 # ------------------------------- Data loading helpers -------------------------------
-# def load_excel_bytes(file_bytes: bytes) -> pd.ExcelFile:
-    # return pd.ExcelFile(io.BytesIO(file_bytes))
-    
-@st.cache_data(show_spinner=True)
-def load_excel(file_path_or_bytes):
-    """Load Excel from path or uploaded bytes and return ExcelFile object."""
-    if isinstance(file_path_or_bytes, bytes):
-        return pd.ExcelFile(io.BytesIO(file_path_or_bytes))
-    else:
-        path = Path(file_path_or_bytes)
-        if not path.exists():
-            raise FileNotFoundError(f"{path} not found")
-        return pd.ExcelFile(path)
-
+def load_excel_bytes(file_bytes: bytes) -> pd.ExcelFile:
+    return pd.ExcelFile(io.BytesIO(file_bytes))
 
 def load_excel_path(path: Path) -> pd.ExcelFile:
     if not path.exists():
@@ -211,26 +199,13 @@ def display_patient_encounter_metrics(encounters_with_details):
 excel: Optional[pd.ExcelFile] = None
 data_source_label = None
 
-# if uploaded is not None:
-    # excel = load_excel_bytes(uploaded.read())
-    # data_source_label = f"Uploaded file: **{uploaded.name}**"
-# elif st.session_state.use_default:
-    # excel = load_excel_path(DEFAULT_PATH)
-    # data_source_label = f"Default file: **{DEFAULT_PATH.name}**"
+if uploaded is not None:
+    excel = load_excel_bytes(uploaded.read())
+    data_source_label = f"Uploaded file: **{uploaded.name}**"
+elif st.session_state.use_default:
+    excel = load_excel_path(DEFAULT_PATH)
+    data_source_label = f"Default file: **{DEFAULT_PATH.name}**"
 
-# if excel is None:
-    # st.info("👋 Upload an Excel file on the left, or click the button to use the default file.")
-    # st.stop()
-    
-if "excel_file" not in st.session_state:
-    if uploaded is not None:
-        st.session_state.excel_file = load_excel(uploaded.read())
-        st.session_state.data_source_label = f"Uploaded file: **{uploaded.name}**"
-    elif st.session_state.get("use_default", False):
-        st.session_state.excel_file = load_excel(DEFAULT_PATH)
-        st.session_state.data_source_label = f"Default file: **{DEFAULT_PATH.name}**"
-
-excel = st.session_state.get("excel_file", None)
 if excel is None:
     st.info("👋 Upload an Excel file on the left, or click the button to use the default file.")
     st.stop()

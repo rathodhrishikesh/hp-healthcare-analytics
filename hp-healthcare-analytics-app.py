@@ -56,7 +56,7 @@ with col2:
         st.rerun()
 
 PUBLIC_DIR = Path("public")
-DEFAULT_PATH = PUBLIC_DIR / "Data Analyst II - Data Exercise.xlsx"
+DEFAULT_PATH = PUBLIC_DIR / "Hospital-Encounters-Test-Data.xlsx"
 
 # ------------------------------- Data loading helpers -------------------------------
 def load_excel_bytes(file_bytes: bytes) -> pd.ExcelFile:

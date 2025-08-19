@@ -10,3 +10,4 @@ plotly
 # Forecasting / Stats
 statsmodels
 scikit-learn
+openpyxl

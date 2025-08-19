@@ -11,3 +11,4 @@ plotly
 statsmodels
 scikit-learn
 openpyxl
+xgboost

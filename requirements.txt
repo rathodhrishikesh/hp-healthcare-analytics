@@ -1,0 +1,12 @@
+# Core
+streamlit
+pandas
+numpy
+requests
+
+# Visualization
+plotly
+
+# Forecasting / Stats
+statsmodels
+scikit-learn

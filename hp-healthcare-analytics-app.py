@@ -25,6 +25,10 @@ try:
     XGB_OK = True
 except Exception:
     XGB_OK = False
+    
+# ------------------------------- Session state for default data -------------------------------
+if "use_default" not in st.session_state:
+    st.session_state.use_default = False
 
 # ------------------------------- Page config / Theme -------------------------------
 st.set_page_config(
@@ -42,7 +46,8 @@ uploaded = st.sidebar.file_uploader("Upload Excel file", type=["xlsx"])
 col1, col2 = st.sidebar.columns(2)
 
 with col1:
-    use_default = st.button("📂 Use Default Data")
+    if st.button("📂 Use Default Data"):
+        st.session_state.use_default = True
 
 with col2:
     if st.button("🔄 Refresh Data"):
@@ -197,7 +202,7 @@ data_source_label = None
 if uploaded is not None:
     excel = load_excel_bytes(uploaded.read())
     data_source_label = f"Uploaded file: **{uploaded.name}**"
-elif use_default:
+elif st.session_state.use_default:
     excel = load_excel_path(DEFAULT_PATH)
     data_source_label = f"Default file: **{DEFAULT_PATH.name}**"
 

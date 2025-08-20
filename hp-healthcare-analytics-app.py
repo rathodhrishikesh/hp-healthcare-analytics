@@ -38,7 +38,7 @@ st.set_page_config(
 )
 
 # ------------------------------- Sidebar: Uploader / Defaults -------------------------------
-st.sidebar.title("📦 Data HP")
+st.sidebar.title("📦 Data")
 st.sidebar.caption("Upload your Excel or use the default placed in `public/`")
 
 uploaded = st.sidebar.file_uploader("Upload Excel file", type=["xlsx"])
@@ -233,45 +233,15 @@ encounters_joined = (
     .merge(data["dim_treatment_df"], on="Treatment_ID", how="left")
 )
 
-# Provider/Treatment column detection
-provider_col = 'Provider_ID' if 'Provider_ID' in data["encounter_fact_df"].columns else None
-treat_col = 'Treatment_ID' if 'Treatment_ID' in data["encounter_fact_df"].columns else None
-
-# --------- ADD THIS BLOCK HERE ---------
-if (
-    "provider_options" not in st.session_state
-    or "treatment_options" not in st.session_state
-    or st.session_state.get("data_id") != id(data["encounter_fact_df"])
-):
-    if provider_col:
-        st.session_state.provider_options = sorted(data["encounter_fact_df"][provider_col].dropna().unique())
-    else:
-        st.session_state.provider_options = []
-    if treat_col:
-        st.session_state.treatment_options = sorted(data["encounter_fact_df"][treat_col].dropna().unique())
-    else:
-        st.session_state.treatment_options = []
-    st.session_state.data_id = id(data["encounter_fact_df"])
-# ---------------------------------------
-
 # Provider filter (if present)
-providers = st.session_state.provider_options
+provider_col = 'Provider_ID' if 'Provider_ID' in data["encounter_fact_df"].columns else None
+providers = sorted(data["encounter_fact_df"][provider_col].dropna().unique()) if provider_col else []
 sel_providers = st.sidebar.multiselect("Filter providers", providers, default=providers[:5] if len(providers) > 0 else [])
 
 # Treatment filter (if present)
-treatments = st.session_state.treatment_options
+treat_col = 'Treatment_ID' if 'Treatment_ID' in data["encounter_fact_df"].columns else None
+treatments = sorted(data["encounter_fact_df"][treat_col].dropna().unique()) if treat_col else []
 sel_treatments = st.sidebar.multiselect("Filter treatments", treatments, default=treatments[:10] if len(treatments) > 0 else [])
-
-
-# # Provider filter (if present)
-# provider_col = 'Provider_ID' if 'Provider_ID' in data["encounter_fact_df"].columns else None
-# providers = sorted(data["encounter_fact_df"][provider_col].dropna().unique()) if provider_col else []
-# sel_providers = st.sidebar.multiselect("Filter providers", providers, default=providers[:5] if len(providers) > 0 else [])
-
-# # Treatment filter (if present)
-# treat_col = 'Treatment_ID' if 'Treatment_ID' in data["encounter_fact_df"].columns else None
-# treatments = sorted(data["encounter_fact_df"][treat_col].dropna().unique()) if treat_col else []
-# sel_treatments = st.sidebar.multiselect("Filter treatments", treatments, default=treatments[:10] if len(treatments) > 0 else [])
 
 # ------------------------------- Tabs / Slides -------------------------------
 tab1, tab2, tab3, tab4, tab5 = st.tabs([

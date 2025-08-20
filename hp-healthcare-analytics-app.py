@@ -836,15 +836,6 @@ with tab5:
     st.subheader("Overview of Uploaded DataFrames")
     
     # st.write("HR Testing Area")
-    # st.write(data["encounter_fact_df"]["Provider_ID"].dtype)
-    # st.write(encounters_joined.shape)
-    # st.write(encounters_joined)
-    # st.write("Blank")
-    # st.write(encounters_with_details.shape)
-    # st.write(encounters_with_details)
-    
-    # are_equal_1_2 = encounters_joined.equals(encounters_with_details)
-    # st.write(f"df1 and df2 are equal: {are_equal_1_2}")
     
     dfs = {
         "Dim.Treatment": dim_treatment_df,

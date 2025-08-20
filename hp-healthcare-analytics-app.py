@@ -51,8 +51,8 @@ with col1:
 
 with col2:
     if st.button("🔄 Refresh Data"):
-        if "use_default" in st.session_state:
-            del st.session_state.use_default
+        st.cache_data.clear()
+        st.cache_resource.clear()
         st.rerun()
 
 PUBLIC_DIR = Path("public")
@@ -69,21 +69,11 @@ def load_excel_path(path: Path) -> pd.ExcelFile:
     return pd.ExcelFile(path)
 
 @st.cache_data(show_spinner=True)
-def parse_dataframes_from_bytes(file_bytes: bytes) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame]:
-    excel_file = pd.ExcelFile(io.BytesIO(file_bytes))
-    dim_treatment_df = excel_file.parse(sheet_name='Dimensions', skiprows=8, nrows=10, usecols='B:C')
-    dim_physician_df = excel_file.parse(sheet_name='Dimensions', skiprows=8, nrows=5, usecols='E:F')
-    dim_patient_df   = excel_file.parse(sheet_name='Dimensions', skiprows=8, usecols='H:J')
-    encounter_fact_df= excel_file.parse(sheet_name='Fact Table', skiprows=2, usecols='B:F')
-    return dim_treatment_df, dim_physician_df, dim_patient_df, encounter_fact_df
-
-@st.cache_data(show_spinner=True)
-def parse_dataframes_from_path(path: str) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame]:
-    excel_file = pd.ExcelFile(path)
-    dim_treatment_df = excel_file.parse(sheet_name='Dimensions', skiprows=8, nrows=10, usecols='B:C')
-    dim_physician_df = excel_file.parse(sheet_name='Dimensions', skiprows=8, nrows=5, usecols='E:F')
-    dim_patient_df   = excel_file.parse(sheet_name='Dimensions', skiprows=8, usecols='H:J')
-    encounter_fact_df= excel_file.parse(sheet_name='Fact Table', skiprows=2, usecols='B:F')
+def parse_dataframes(_excel_file) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+    dim_treatment_df = _excel_file.parse(sheet_name='Dimensions', skiprows=8, nrows=10, usecols='B:C')
+    dim_physician_df = _excel_file.parse(sheet_name='Dimensions', skiprows=8, nrows=5, usecols='E:F')
+    dim_patient_df   = _excel_file.parse(sheet_name='Dimensions', skiprows=8, usecols='H:J')
+    encounter_fact_df= _excel_file.parse(sheet_name='Fact Table', skiprows=2, usecols='B:F')
     return dim_treatment_df, dim_physician_df, dim_patient_df, encounter_fact_df
 
 
@@ -210,16 +200,18 @@ excel: Optional[pd.ExcelFile] = None
 data_source_label = None
 
 if uploaded is not None:
-    file_bytes = uploaded.read()
-    dim_treatment_df, dim_physician_df, dim_patient_df, encounter_fact_df = parse_dataframes_from_bytes(file_bytes)
+    excel = load_excel_bytes(uploaded.read())
     data_source_label = f"Uploaded file: **{uploaded.name}**"
 elif st.session_state.use_default:
-    dim_treatment_df, dim_physician_df, dim_patient_df, encounter_fact_df = parse_dataframes_from_path(str(DEFAULT_PATH))
+    excel = load_excel_path(DEFAULT_PATH)
     data_source_label = f"Default file: **{DEFAULT_PATH.name}**"
-else:
+
+if excel is None:
     st.info("👋 Upload an Excel file on the left, or click the button to use the default file.")
     st.stop()
 
+# Parse and preprocess
+dim_treatment_df, dim_physician_df, dim_patient_df, encounter_fact_df = parse_dataframes(excel)
 data = preprocess(dim_treatment_df, dim_physician_df, dim_patient_df, encounter_fact_df)
 
 # ------------------------------- Derived data / shared widgets -------------------------------
@@ -492,8 +484,6 @@ with tab2:
                 ci = res.conf_int(alpha=0.05)
                 f.index = pd.period_range(start=last_period+1, periods=steps, freq="M")
                 ci.index = f.index
-                # Fix: Rename columns to 'lower' and 'upper'
-                ci.columns = ["lower", "upper"]
 
             elif model_name == "XGBoost" and XGB_OK:
                 x_all = np.arange(len(series)).reshape(-1, 1)

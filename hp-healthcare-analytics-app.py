@@ -38,7 +38,7 @@ st.set_page_config(
 )
 
 # ------------------------------- Sidebar: Uploader / Defaults -------------------------------
-st.sidebar.title("📦 Data Version 12:27 AM")
+st.sidebar.title("📦 Data Version 12:35 AM")
 st.sidebar.caption("Upload your Excel or use the default placed in `public/`")
 
 uploaded = st.sidebar.file_uploader("Upload Excel file", type=["xlsx"])
@@ -233,38 +233,45 @@ data = preprocess(dim_treatment_df, dim_physician_df, dim_patient_df, encounter_
 st.sidebar.markdown("---")
 st.sidebar.success(data_source_label)
 
-# Provider filter (if present)
-provider_col = 'Provider_ID' if 'Provider_ID' in data["encounter_fact_df"].columns else None
-providers = sorted(data["encounter_fact_df"][provider_col].dropna().unique()) if provider_col else []
-sel_providers = st.sidebar.multiselect("Filter providers", providers, default=providers[:5] if len(providers) > 0 else [])
+# Initialize session state keys if not already present
+if "sel_providers" not in st.session_state:
+    st.session_state.sel_providers = []
+if "sel_treatments" not in st.session_state:
+    st.session_state.sel_treatments = []
+if "encounters_joined" not in st.session_state:
+    st.session_state.encounters_joined = data["encounter_fact_df"]
 
-# Treatment filter (if present)
-treat_col = 'Treatment_ID' if 'Treatment_ID' in data["encounter_fact_df"].columns else None
-treatments = sorted(data["encounter_fact_df"][treat_col].dropna().unique()) if treat_col else []
-sel_treatments = st.sidebar.multiselect("Filter treatments", treatments, default=treatments[:10] if len(treatments) > 0 else [])
+# Filters inside a form
+with st.sidebar.form("filters_form"):
+    provider_col = 'Provider_ID' if 'Provider_ID' in data["encounter_fact_df"].columns else None
+    providers = sorted(data["encounter_fact_df"][provider_col].dropna().unique()) if provider_col else []
+    sel_providers = st.multiselect(
+        "Filter providers",
+        providers,
+        default=st.session_state.sel_providers if st.session_state.sel_providers else providers[:5]
+    )
 
-# --- Add an "Apply Filters" button ---
-apply_filters = st.sidebar.button("✅ Apply Filters")
+    treat_col = 'Treatment_ID' if 'Treatment_ID' in data["encounter_fact_df"].columns else None
+    treatments = sorted(data["encounter_fact_df"][treat_col].dropna().unique()) if treat_col else []
+    sel_treatments = st.multiselect(
+        "Filter treatments",
+        treatments,
+        default=st.session_state.sel_treatments if st.session_state.sel_treatments else treatments[:10]
+    )
 
-# Store filter selections in session state to persist across reruns
-if "applied_sel_providers" not in st.session_state:
-    st.session_state.applied_sel_providers = sel_providers
-if "applied_sel_treatments" not in st.session_state:
-    st.session_state.applied_sel_treatments = sel_treatments
+    apply_filters = st.form_submit_button("Apply Filters")
 
-# Only update session state and run heavy work when button is clicked
+# Update session state only when Apply is clicked
 if apply_filters:
-    st.session_state.applied_sel_providers = sel_providers
-    st.session_state.applied_sel_treatments = sel_treatments
+    st.session_state.sel_providers = sel_providers
+    st.session_state.sel_treatments = sel_treatments
+    st.session_state.encounters_joined = get_filtered_encounters(
+        data["encounter_fact_df"], data["dim_patient_df"], data["dim_treatment_df"],
+        st.session_state.sel_providers, st.session_state.sel_treatments, provider_col, treat_col
+    )
 
-# Use the applied filters for all downstream computations
-applied_sel_providers = st.session_state.applied_sel_providers
-applied_sel_treatments = st.session_state.applied_sel_treatments
-
-encounters_joined = get_filtered_encounters(
-    data["encounter_fact_df"], data["dim_patient_df"], data["dim_treatment_df"],
-    applied_sel_providers, applied_sel_treatments, provider_col, treat_col
-)
+# Always use session_state.encounters_joined in downstream code
+encounters_joined = st.session_state.encounters_joined
 
 # ------------------------------- Tabs / Slides -------------------------------
 tab1, tab2, tab3, tab4, tab5 = st.tabs([

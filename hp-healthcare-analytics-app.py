@@ -38,7 +38,7 @@ st.set_page_config(
 )
 
 # ------------------------------- Sidebar: Uploader / Defaults -------------------------------
-st.sidebar.title("📦 Data Version 10:45 PM")
+st.sidebar.title("📦 Data Version 12:12 AM")
 st.sidebar.caption("Upload your Excel or use the default placed in `public/`")
 
 uploaded = st.sidebar.file_uploader("Upload Excel file", type=["xlsx"])
@@ -60,16 +60,6 @@ PUBLIC_DIR = Path("public")
 DEFAULT_PATH = PUBLIC_DIR / "Hospital-Encounters-Test-Data.xlsx"
 
 # ------------------------------- Data loading helpers -------------------------------
-def load_excel_bytes(file_bytes: bytes) -> pd.ExcelFile:
-    return pd.ExcelFile(io.BytesIO(file_bytes))
-
-def load_excel_path(path: Path) -> pd.ExcelFile:
-    if not path.exists():
-        st.error(f"❌ Default file not found at {path}")
-        st.stop()
-    return pd.ExcelFile(path)
-
-
 @st.cache_data(show_spinner=True)
 def parse_dataframes_from_path(path: str):
     excel_file = pd.ExcelFile(path)
@@ -88,20 +78,17 @@ def parse_dataframes_from_bytes(file_bytes: bytes):
     encounter_fact_df= excel_file.parse(sheet_name='Fact Table', skiprows=2, usecols='B:F')
     return dim_treatment_df, dim_physician_df, dim_patient_df, encounter_fact_df
 
-@st.cache_data(show_spinner=True)
-def get_encounters_joined(data: dict) -> pd.DataFrame:
-    return (
-        data["encounter_fact_df"]
-        .merge(data["dim_patient_df"], on="Patient_ID", how="left")
-        .merge(data["dim_treatment_df"], on="Treatment_ID", how="left")
+@st.cache_data(show_spinner=False)
+def get_filtered_encounters(encounter_fact_df, dim_patient_df, dim_treatment_df, sel_providers, sel_treatments, provider_col, treat_col):
+    df = (
+        encounter_fact_df
+        .merge(dim_patient_df, on="Patient_ID", how="left")
+        .merge(dim_treatment_df, on="Treatment_ID", how="left")
     )
-
-def filter_encounters(encounters_df, sel_providers, sel_treatments):
-    df = encounters_df
-    if sel_providers:
-        df = df[df['Provider_ID'].isin(sel_providers)]
-    if sel_treatments:
-        df = df[df['Treatment_ID'].isin(sel_treatments)]
+    if provider_col and sel_providers:
+        df = df[df[provider_col].isin(sel_providers)]
+    if treat_col and sel_treatments:
+        df = df[df[treat_col].isin(sel_treatments)]
     return df
 
 def preprocess(
@@ -242,8 +229,6 @@ else:
 
 data = preprocess(dim_treatment_df, dim_physician_df, dim_patient_df, encounter_fact_df)
 
-encounters_joined = get_encounters_joined(data)
-
 # ------------------------------- Derived data / shared widgets -------------------------------
 st.sidebar.markdown("---")
 st.sidebar.success(data_source_label)
@@ -258,7 +243,11 @@ treat_col = 'Treatment_ID' if 'Treatment_ID' in data["encounter_fact_df"].column
 treatments = sorted(data["encounter_fact_df"][treat_col].dropna().unique()) if treat_col else []
 sel_treatments = st.sidebar.multiselect("Filter treatments", treatments, default=treatments[:10] if len(treatments) > 0 else [])
 
-filtered_encounters = filter_encounters(encounters_joined, sel_providers, sel_treatments)
+encounters_joined = get_filtered_encounters(
+    data["encounter_fact_df"], data["dim_patient_df"], data["dim_treatment_df"],
+    sel_providers, sel_treatments, provider_col, treat_col
+)
+
 # ------------------------------- Tabs / Slides -------------------------------
 tab1, tab2, tab3, tab4, tab5 = st.tabs([
     "1️⃣ Hospital Encounters Data Analysis",
@@ -271,7 +260,7 @@ tab1, tab2, tab3, tab4, tab5 = st.tabs([
 # ===================================== Slide 1 =====================================
 with tab1:
     st.subheader("Q1. Distribution of Encounters per Day & Centricity Measure")
-    df_f = filtered_encounters.copy()
+    df_f = encounters_joined.copy()
     if provider_col and len(sel_providers) > 0:
         df_f = df_f[df_f[provider_col].isin(sel_providers)]
 
@@ -716,7 +705,7 @@ with tab2:
 # ===================================== Slide 3 =====================================
 with tab3:
 
-    display_patient_encounter_metrics(filtered_encounters)
+    display_patient_encounter_metrics(encounters_joined)
     
     st.subheader("Q2. Are treatment types distributed differently across provider specialties?")
     # Join encounters with dimensions for Specialty and Treatment_Desc
@@ -807,7 +796,7 @@ with tab3:
 with tab4:
     st.subheader("Treatment-wise Unique Patient Counts by Age Group")
     # Build matrix: rows Treatment_ID, columns Age Groups, values distinct patients
-    enc = filtered_encounters.copy()
+    enc = encounters_joined.copy()
     bins = [0, 5, 13, 22, 45, 65, 120]
     labels = ['0–5', '6–13', '14–22', '23–45', '46–65', '66–120']
     enc["Age_Group"] = pd.cut(enc["Patient_Age"], bins=bins, labels=labels)

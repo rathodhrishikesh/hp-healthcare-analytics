@@ -497,6 +497,8 @@ with tab2:
                 ci = res.conf_int(alpha=0.05)
                 f.index = pd.period_range(start=last_period+1, periods=steps, freq="M")
                 ci.index = f.index
+                # Fix: Rename columns to 'lower' and 'upper'
+                ci.columns = ["lower", "upper"]
 
             elif model_name == "XGBoost" and XGB_OK:
                 x_all = np.arange(len(series)).reshape(-1, 1)
@@ -701,35 +703,58 @@ with tab2:
 
 
 # ===================================== Slide 3 =====================================
-with tab3:
+@st.cache_data(show_spinner=True)
+def get_specialty_treatment_counts(encounter_fact_df, dim_treatment_df, dim_physician_df, sel_providers, sel_treatments):
+    merged = (
+        encounter_fact_df
+        .merge(dim_treatment_df, on="Treatment_ID", how="left")
+        .merge(dim_physician_df, left_on="Provider_ID", right_on="Physician_ID", how="left")
+    )
+    if sel_providers:
+        merged = merged[merged["Provider_ID"].isin(sel_providers)]
+    if sel_treatments:
+        merged = merged[merged["Treatment_ID"].isin(sel_treatments)]
+    grp = (
+        merged.groupby(["Specialty", "Treatment_Desc"])
+        .size().reset_index(name="Encounter_Count")
+        .sort_values(["Specialty", "Encounter_Count"], ascending=[True, False])
+    )
+    return grp
 
+@st.cache_data(show_spinner=True)
+def get_agegroup_heatmap_df(encounters_joined, provider_col, sel_providers, treat_col, sel_treatments):
+    bins = [0, 5, 13, 22, 45, 65, 120]
+    labels = ['0–5', '6–13', '14–22', '23–45', '46–65', '66–120']
+    tmp = encounters_joined.copy()
+    tmp["Age_Group"] = pd.cut(tmp["Patient_Age"], bins=bins, labels=labels)
+    if provider_col and sel_providers:
+        tmp = tmp[tmp[provider_col].isin(sel_providers)]
+    if treat_col and sel_treatments:
+        tmp = tmp[tmp[treat_col].isin(sel_treatments)]
+    crosstab = (
+        tmp.groupby(["Gender_at_Birth", "Age_Group", "Treatment_Desc"])
+        .size().reset_index(name="Encounter_Count")
+    )
+    return crosstab
+
+with tab3:
     display_patient_encounter_metrics(encounters_joined)
     
     st.subheader("Q2. Are treatment types distributed differently across provider specialties?")
-    # Join encounters with dimensions for Specialty and Treatment_Desc
-    # Align physician dimension names: expect columns Physician_ID and Specialty
     if "Physician_ID" in data["dim_physician_df"].columns:
-        merged = (
-            data["encounter_fact_df"]
-            .merge(data["dim_treatment_df"], on="Treatment_ID", how="left")
-            .merge(data["dim_physician_df"], left_on="Provider_ID", right_on="Physician_ID", how="left")
+        grp = get_specialty_treatment_counts(
+            data["encounter_fact_df"],
+            data["dim_treatment_df"],
+            data["dim_physician_df"],
+            sel_providers,
+            sel_treatments
         )
-        # Provider/treatment filters
-        if provider_col and len(sel_providers) > 0:
-            merged = merged[merged["Provider_ID"].isin(sel_providers)]
-        if treat_col and len(sel_treatments) > 0:
-            merged = merged[merged["Treatment_ID"].isin(sel_treatments)]
-
-        grp = (
-            merged.groupby(["Specialty", "Treatment_Desc"])
-            .size().reset_index(name="Encounter_Count")
-            .sort_values(["Specialty", "Encounter_Count"], ascending=[True, False])
-        )
-
         if len(grp):
-            fig_bar = px.bar(grp, x="Specialty", y="Encounter_Count", color="Treatment_Desc",
-                             barmode="group", title="Treatment counts by Specialty",
-                             hover_data=["Treatment_Desc", "Encounter_Count"])
+            fig_bar = px.bar(
+                grp, x="Specialty", y="Encounter_Count", color="Treatment_Desc",
+                barmode="group", title="Treatment counts by Specialty",
+                hover_data=["Treatment_Desc", "Encounter_Count"]
+            )
             st.plotly_chart(fig_bar, use_container_width=True)
         else:
             st.info("No rows after filters.")
@@ -738,22 +763,9 @@ with tab3:
 
     st.markdown("---")
     st.subheader("Q2a. Patterns by Age Group or Gender at Birth")
-    # Build age groups
     if "Patient_Age" in encounters_joined.columns:
-        bins = [0, 5, 13, 22, 45, 65, 120]
-        labels = ['0–5', '6–13', '14–22', '23–45', '46–65', '66–120']
-        tmp = encounters_joined.copy()
-        tmp["Age_Group"] = pd.cut(tmp["Patient_Age"], bins=bins, labels=labels)
-        # optional provider/treatment filters
-        if provider_col and len(sel_providers) > 0:
-            tmp = tmp[tmp[provider_col].isin(sel_providers)]
-        if treat_col and len(sel_treatments) > 0:
-            tmp = tmp[tmp[treat_col].isin(sel_treatments)]
-
-        # Heatmap: Age group vs Treatment (counts), faceted by Gender
-        crosstab = (
-            tmp.groupby(["Gender_at_Birth", "Age_Group", "Treatment_Desc"])
-            .size().reset_index(name="Encounter_Count")
+        crosstab = get_agegroup_heatmap_df(
+            encounters_joined, provider_col, sel_providers, treat_col, sel_treatments
         )
         st.caption("Heatmap per gender: Age group × Treatment (Encounter counts)")
         genders = list(crosstab["Gender_at_Birth"].dropna().unique())
@@ -761,22 +773,19 @@ with tab3:
             sub = crosstab[crosstab["Gender_at_Birth"] == g]
             if len(sub) == 0:
                 continue
-
             heat = sub.pivot_table(
                 index="Age_Group",
                 columns="Treatment_Desc",
                 values="Encounter_Count",
                 fill_value=0
             )
-
             # Choose color scale based on gender
             if g == "F":
-                color_scale = ["#ffe6f0", "#ffb3cc", "#ff6699", "#cc0066"]  # light pink → deep pink
+                color_scale = ["#ffe6f0", "#ffb3cc", "#ff6699", "#cc0066"]
             elif g == "M":
-                color_scale = ["#e6f0ff", "#99ccff", "#3399ff", "#004c99"]  # light blue → deep blue
+                color_scale = ["#e6f0ff", "#99ccff", "#3399ff", "#004c99"]
             else:
-                color_scale = "Blues"  # fallback, in case other genders appear
-
+                color_scale = "Blues"
             fig_heat = px.imshow(
                 heat,
                 aspect="auto",
@@ -784,12 +793,10 @@ with tab3:
                 labels=dict(x="Treatment", y="Age Group", color="Encounters"),
                 color_continuous_scale=color_scale
             )
-
             st.plotly_chart(fig_heat, use_container_width=True)
-
     else:
         st.warning("Patient_Age not available in joined encounters table.")
-
+        
 # ===================================== Slide 4 =====================================
 with tab4:
     st.subheader("Treatment-wise Unique Patient Counts by Age Group")

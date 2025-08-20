@@ -88,6 +88,13 @@ def parse_dataframes_from_bytes(file_bytes: bytes):
     encounter_fact_df= excel_file.parse(sheet_name='Fact Table', skiprows=2, usecols='B:F')
     return dim_treatment_df, dim_physician_df, dim_patient_df, encounter_fact_df
 
+@st.cache_data(show_spinner=True)
+def get_encounters_joined(data: dict) -> pd.DataFrame:
+    return (
+        data["encounter_fact_df"]
+        .merge(data["dim_patient_df"], on="Patient_ID", how="left")
+        .merge(data["dim_treatment_df"], on="Treatment_ID", how="left")
+    )
 
 def preprocess(
     dim_treatment_df: pd.DataFrame,
@@ -227,16 +234,11 @@ else:
 
 data = preprocess(dim_treatment_df, dim_physician_df, dim_patient_df, encounter_fact_df)
 
+encounters_joined = get_encounters_joined(data)
+
 # ------------------------------- Derived data / shared widgets -------------------------------
 st.sidebar.markdown("---")
 st.sidebar.success(data_source_label)
-
-# Common merges for later tabs
-encounters_joined = (
-    data["encounter_fact_df"]
-    .merge(data["dim_patient_df"], on="Patient_ID", how="left")
-    .merge(data["dim_treatment_df"], on="Treatment_ID", how="left")
-)
 
 # Provider filter (if present)
 provider_col = 'Provider_ID' if 'Provider_ID' in data["encounter_fact_df"].columns else None
@@ -497,6 +499,8 @@ with tab2:
                 ci = res.conf_int(alpha=0.05)
                 f.index = pd.period_range(start=last_period+1, periods=steps, freq="M")
                 ci.index = f.index
+                # Fix: Rename columns to 'lower' and 'upper'
+                ci.columns = ["lower", "upper"]
 
             elif model_name == "XGBoost" and XGB_OK:
                 x_all = np.arange(len(series)).reshape(-1, 1)

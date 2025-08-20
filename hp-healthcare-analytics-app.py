@@ -96,6 +96,14 @@ def get_encounters_joined(data: dict) -> pd.DataFrame:
         .merge(data["dim_treatment_df"], on="Treatment_ID", how="left")
     )
 
+def filter_encounters(encounters_df, sel_providers, sel_treatments):
+    df = encounters_df
+    if sel_providers:
+        df = df[df['Provider_ID'].isin(sel_providers)]
+    if sel_treatments:
+        df = df[df['Treatment_ID'].isin(sel_treatments)]
+    return df
+
 def preprocess(
     dim_treatment_df: pd.DataFrame,
     dim_physician_df: pd.DataFrame,
@@ -235,6 +243,7 @@ else:
 data = preprocess(dim_treatment_df, dim_physician_df, dim_patient_df, encounter_fact_df)
 
 encounters_joined = get_encounters_joined(data)
+filtered_encounters = filter_encounters(encounters_joined, sel_providers, sel_treatments)
 
 # ------------------------------- Derived data / shared widgets -------------------------------
 st.sidebar.markdown("---")
@@ -262,7 +271,7 @@ tab1, tab2, tab3, tab4, tab5 = st.tabs([
 # ===================================== Slide 1 =====================================
 with tab1:
     st.subheader("Q1. Distribution of Encounters per Day & Centricity Measure")
-    df_f = data["encounter_fact_df"].copy()
+    df_f = filtered_encounters.copy()
     if provider_col and len(sel_providers) > 0:
         df_f = df_f[df_f[provider_col].isin(sel_providers)]
 
@@ -707,7 +716,7 @@ with tab2:
 # ===================================== Slide 3 =====================================
 with tab3:
 
-    display_patient_encounter_metrics(encounters_joined)
+    display_patient_encounter_metrics(filtered_encounters)
     
     st.subheader("Q2. Are treatment types distributed differently across provider specialties?")
     # Join encounters with dimensions for Specialty and Treatment_Desc
@@ -798,7 +807,7 @@ with tab3:
 with tab4:
     st.subheader("Treatment-wise Unique Patient Counts by Age Group")
     # Build matrix: rows Treatment_ID, columns Age Groups, values distinct patients
-    enc = encounters_joined.copy()
+    enc = filtered_encounters.copy()
     bins = [0, 5, 13, 22, 45, 65, 120]
     labels = ['0–5', '6–13', '14–22', '23–45', '46–65', '66–120']
     enc["Age_Group"] = pd.cut(enc["Patient_Age"], bins=bins, labels=labels)

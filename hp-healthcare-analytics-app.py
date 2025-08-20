@@ -38,7 +38,7 @@ st.set_page_config(
 )
 
 # ------------------------------- Sidebar: Uploader / Defaults -------------------------------
-st.sidebar.title("📦 Data")
+st.sidebar.title("📦 Data Version 1")
 st.sidebar.caption("Upload your Excel or use the default placed in `public/`")
 
 uploaded = st.sidebar.file_uploader("Upload Excel file", type=["xlsx"])
@@ -48,6 +48,7 @@ col1, col2 = st.sidebar.columns(2)
 with col1:
     if st.button("📂 Use Default Data"):
         st.session_state.use_default = True
+        st.rerun()
 
 with col2:
     if st.button("🔄 Refresh Data"):
@@ -68,12 +69,23 @@ def load_excel_path(path: Path) -> pd.ExcelFile:
         st.stop()
     return pd.ExcelFile(path)
 
+
 @st.cache_data(show_spinner=True)
-def parse_dataframes(_excel_file) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame]:
-    dim_treatment_df = _excel_file.parse(sheet_name='Dimensions', skiprows=8, nrows=10, usecols='B:C')
-    dim_physician_df = _excel_file.parse(sheet_name='Dimensions', skiprows=8, nrows=5, usecols='E:F')
-    dim_patient_df   = _excel_file.parse(sheet_name='Dimensions', skiprows=8, usecols='H:J')
-    encounter_fact_df= _excel_file.parse(sheet_name='Fact Table', skiprows=2, usecols='B:F')
+def parse_dataframes_from_path(path: str):
+    excel_file = pd.ExcelFile(path)
+    dim_treatment_df = excel_file.parse(sheet_name='Dimensions', skiprows=8, nrows=10, usecols='B:C')
+    dim_physician_df = excel_file.parse(sheet_name='Dimensions', skiprows=8, nrows=5, usecols='E:F')
+    dim_patient_df   = excel_file.parse(sheet_name='Dimensions', skiprows=8, usecols='H:J')
+    encounter_fact_df= excel_file.parse(sheet_name='Fact Table', skiprows=2, usecols='B:F')
+    return dim_treatment_df, dim_physician_df, dim_patient_df, encounter_fact_df
+
+@st.cache_data(show_spinner=True)
+def parse_dataframes_from_bytes(file_bytes: bytes):
+    excel_file = pd.ExcelFile(io.BytesIO(file_bytes))
+    dim_treatment_df = excel_file.parse(sheet_name='Dimensions', skiprows=8, nrows=10, usecols='B:C')
+    dim_physician_df = excel_file.parse(sheet_name='Dimensions', skiprows=8, nrows=5, usecols='E:F')
+    dim_patient_df   = excel_file.parse(sheet_name='Dimensions', skiprows=8, usecols='H:J')
+    encounter_fact_df= excel_file.parse(sheet_name='Fact Table', skiprows=2, usecols='B:F')
     return dim_treatment_df, dim_physician_df, dim_patient_df, encounter_fact_df
 
 
@@ -200,18 +212,19 @@ excel: Optional[pd.ExcelFile] = None
 data_source_label = None
 
 if uploaded is not None:
-    excel = load_excel_bytes(uploaded.read())
+    file_bytes = uploaded.read()
+    dim_treatment_df, dim_physician_df, dim_patient_df, encounter_fact_df = parse_dataframes_from_bytes(file_bytes)
     data_source_label = f"Uploaded file: **{uploaded.name}**"
 elif st.session_state.use_default:
-    excel = load_excel_path(DEFAULT_PATH)
+    if not DEFAULT_PATH.exists():
+        st.error(f"❌ Default file not found at {DEFAULT_PATH}")
+        st.stop()
+    dim_treatment_df, dim_physician_df, dim_patient_df, encounter_fact_df = parse_dataframes_from_path(str(DEFAULT_PATH))
     data_source_label = f"Default file: **{DEFAULT_PATH.name}**"
-
-if excel is None:
+else:
     st.info("👋 Upload an Excel file on the left, or click the button to use the default file.")
     st.stop()
 
-# Parse and preprocess
-dim_treatment_df, dim_physician_df, dim_patient_df, encounter_fact_df = parse_dataframes(excel)
 data = preprocess(dim_treatment_df, dim_physician_df, dim_patient_df, encounter_fact_df)
 
 # ------------------------------- Derived data / shared widgets -------------------------------

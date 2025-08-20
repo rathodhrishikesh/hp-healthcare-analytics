@@ -38,7 +38,7 @@ st.set_page_config(
 )
 
 # ------------------------------- Sidebar: Uploader / Defaults -------------------------------
-st.sidebar.title("📦 Data Version 12:12 AM")
+st.sidebar.title("📦 Data Version 12:27 AM")
 st.sidebar.caption("Upload your Excel or use the default placed in `public/`")
 
 uploaded = st.sidebar.file_uploader("Upload Excel file", type=["xlsx"])
@@ -243,9 +243,27 @@ treat_col = 'Treatment_ID' if 'Treatment_ID' in data["encounter_fact_df"].column
 treatments = sorted(data["encounter_fact_df"][treat_col].dropna().unique()) if treat_col else []
 sel_treatments = st.sidebar.multiselect("Filter treatments", treatments, default=treatments[:10] if len(treatments) > 0 else [])
 
+# --- Add an "Apply Filters" button ---
+apply_filters = st.sidebar.button("✅ Apply Filters")
+
+# Store filter selections in session state to persist across reruns
+if "applied_sel_providers" not in st.session_state:
+    st.session_state.applied_sel_providers = sel_providers
+if "applied_sel_treatments" not in st.session_state:
+    st.session_state.applied_sel_treatments = sel_treatments
+
+# Only update session state and run heavy work when button is clicked
+if apply_filters:
+    st.session_state.applied_sel_providers = sel_providers
+    st.session_state.applied_sel_treatments = sel_treatments
+
+# Use the applied filters for all downstream computations
+applied_sel_providers = st.session_state.applied_sel_providers
+applied_sel_treatments = st.session_state.applied_sel_treatments
+
 encounters_joined = get_filtered_encounters(
     data["encounter_fact_df"], data["dim_patient_df"], data["dim_treatment_df"],
-    sel_providers, sel_treatments, provider_col, treat_col
+    applied_sel_providers, applied_sel_treatments, provider_col, treat_col
 )
 
 # ------------------------------- Tabs / Slides -------------------------------

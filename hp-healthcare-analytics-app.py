@@ -38,7 +38,7 @@ st.set_page_config(
 )
 
 # ------------------------------- Sidebar: Uploader / Defaults -------------------------------
-st.sidebar.title("📦 Data Version 1")
+st.sidebar.title("📦 Data Version 10:45 PM")
 st.sidebar.caption("Upload your Excel or use the default placed in `public/`")
 
 uploaded = st.sidebar.file_uploader("Upload Excel file", type=["xlsx"])
@@ -243,7 +243,6 @@ else:
 data = preprocess(dim_treatment_df, dim_physician_df, dim_patient_df, encounter_fact_df)
 
 encounters_joined = get_encounters_joined(data)
-filtered_encounters = filter_encounters(encounters_joined, sel_providers, sel_treatments)
 
 # ------------------------------- Derived data / shared widgets -------------------------------
 st.sidebar.markdown("---")
@@ -259,6 +258,7 @@ treat_col = 'Treatment_ID' if 'Treatment_ID' in data["encounter_fact_df"].column
 treatments = sorted(data["encounter_fact_df"][treat_col].dropna().unique()) if treat_col else []
 sel_treatments = st.sidebar.multiselect("Filter treatments", treatments, default=treatments[:10] if len(treatments) > 0 else [])
 
+filtered_encounters = filter_encounters(encounters_joined, sel_providers, sel_treatments)
 # ------------------------------- Tabs / Slides -------------------------------
 tab1, tab2, tab3, tab4, tab5 = st.tabs([
     "1️⃣ Hospital Encounters Data Analysis",

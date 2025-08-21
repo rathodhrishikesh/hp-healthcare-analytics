@@ -1,6 +1,6 @@
 # Healthcare Analytics – Patient Encounters & Forecasts
 
-A **dynamic app** for interactive exploration of patient encounters and treatment trends. Users can filter by providers and treatments, visualize demographic insights, and track time series trends and forecasts for key metrics, all in an intuitive dashboard interface.
+A **dynamic app** that enables interactive exploration of patient encounters and treatment trends. Users can filter by providers and treatments, visualize demographic insights, and track time series trends and forecasts for key metrics, all in an intuitive dashboard interface.
 
 ---
 

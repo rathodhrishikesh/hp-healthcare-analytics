@@ -53,21 +53,13 @@ with col1:
 with col2:
     if st.button("🔄 Refresh Data"):
         st.cache_data.clear()
+        st.cache_resource.clear()
         st.rerun()
 
 PUBLIC_DIR = Path("public")
 DEFAULT_PATH = PUBLIC_DIR / "Hospital-Encounters-Test-Data.xlsx"
 
 # ------------------------------- Data loading helpers -------------------------------
-@st.cache_data(show_spinner=True)
-def load_default_fast():
-    return (
-        pd.read_parquet(PUBLIC_DIR / "dim_treatment.parquet"),
-        pd.read_parquet(PUBLIC_DIR / "dim_physician.parquet"),
-        pd.read_parquet(PUBLIC_DIR / "dim_patient.parquet"),
-        pd.read_parquet(PUBLIC_DIR / "encounter_fact.parquet"),
-    )
-
 @st.cache_data(show_spinner=True)
 def parse_dataframes_from_path(path: str):
     excel_file = pd.ExcelFile(path)
@@ -87,19 +79,17 @@ def parse_dataframes_from_bytes(file_bytes: bytes):
     return dim_treatment_df, dim_physician_df, dim_patient_df, encounter_fact_df
 
 @st.cache_data(show_spinner=False)
-def apply_filters(df, provider_ids=None, treatment_ids=None):
-    if provider_ids:
-        df = df[df["Provider_ID"].isin(provider_ids)]
-    if treatment_ids:
-        df = df[df["Treatment_ID"].isin(treatment_ids)]
-    return df
-
-@st.cache_data(show_spinner=False)
-def build_joined(encounter_fact_df, dim_patient_df):
-    return (
-        encounter_fact_df  # already has Treatment_Desc from preprocess
+def get_filtered_encounters(encounter_fact_df, dim_patient_df, dim_treatment_df, sel_providers, sel_treatments, provider_col, treat_col):
+    df = (
+        encounter_fact_df
         .merge(dim_patient_df, on="Patient_ID", how="left")
+        .merge(dim_treatment_df, on="Treatment_ID", how="left")
     )
+    if provider_col and sel_providers:
+        df = df[df[provider_col].isin(sel_providers)]
+    if treat_col and sel_treatments:
+        df = df[df[treat_col].isin(sel_treatments)]
+    return df
 
 def preprocess(
     dim_treatment_df: pd.DataFrame,
@@ -225,14 +215,14 @@ data_source_label = None
 
 if uploaded is not None:
     file_bytes = uploaded.read()
-    dim_treatment_df, dim_physician_df, dim_patient_df, encounter_fact_df = load_default_fast()
-    data_source_label = "Default Upload (parquet) data"
+    dim_treatment_df, dim_physician_df, dim_patient_df, encounter_fact_df = parse_dataframes_from_bytes(file_bytes)
+    data_source_label = f"Uploaded file: **{uploaded.name}**"
 elif st.session_state.use_default:
     if not DEFAULT_PATH.exists():
         st.error(f"❌ Default file not found at {DEFAULT_PATH}")
         st.stop()
-    dim_treatment_df, dim_physician_df, dim_patient_df, encounter_fact_df = load_default_fast()
-    data_source_label = "Default Double (parquet) data"
+    dim_treatment_df, dim_physician_df, dim_patient_df, encounter_fact_df = parse_dataframes_from_path(str(DEFAULT_PATH))
+    data_source_label = f"Default file: **{DEFAULT_PATH.name}**"
 else:
     st.info("👋 Upload an Excel file on the left, or click the button to use the default file.")
     st.stop()
@@ -253,8 +243,10 @@ treat_col = 'Treatment_ID' if 'Treatment_ID' in data["encounter_fact_df"].column
 treatments = sorted(data["encounter_fact_df"][treat_col].dropna().unique()) if treat_col else []
 sel_treatments = st.sidebar.multiselect("Filter treatments", treatments, default=treatments[:10] if len(treatments) > 0 else [])
 
-joined_all = build_joined(data["encounter_fact_df"], data["dim_patient_df"])
-encounters_joined = apply_filters(joined_all, sel_providers, sel_treatments)
+encounters_joined = get_filtered_encounters(
+    data["encounter_fact_df"], data["dim_patient_df"], data["dim_treatment_df"],
+    sel_providers, sel_treatments, provider_col, treat_col
+)
 
 # ------------------------------- Tabs / Slides -------------------------------
 tab1, tab2, tab3, tab4, tab5 = st.tabs([

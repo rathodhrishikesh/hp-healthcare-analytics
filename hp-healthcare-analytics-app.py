@@ -38,7 +38,7 @@ st.set_page_config(
 )
 
 # ------------------------------- Sidebar: Uploader / Defaults -------------------------------
-st.sidebar.title("📦 Data Version 12:12 AM")
+st.sidebar.title("📦 Data Version 12:55 AM")
 st.sidebar.caption("Upload your Excel or use the default placed in `public/`")
 
 uploaded = st.sidebar.file_uploader("Upload Excel file", type=["xlsx"])
@@ -249,9 +249,9 @@ encounters_joined = get_filtered_encounters(
 )
 
 # ------------------------------- Tabs / Slides -------------------------------
-tab1, tab2, tab3, tab4, tab5 = st.tabs([
+tab1, tab2, tab3, tab4 = st.tabs([
     "1️⃣ Hospital Encounters Data Analysis",
-    "2️⃣ Time Series Analysis & Forecasting",
+    #"2️⃣ Time Series Analysis & Forecasting",
     "3️⃣ Demographics",
     "4️⃣ Treatment-wise Unique Patient Counts",
     "5️⃣ Uploaded Data Overview"
@@ -326,384 +326,8 @@ with tab1:
         fig_multi.update_layout(title="Monthly Encounters by Provider", xaxis_title="Month", yaxis_title="Encounters")
         st.plotly_chart(fig_multi, use_container_width=True)
 
-# ===================================== Slide 2 =====================================
-with tab2:
-    st.subheader("Q1c. Time Series Forecasting – Expected Encounters in November 2020")
-
-    # Build monthly series from full dataset (no provider filter for the core target unless user checks)
-    st.checkbox_label = "Apply provider filter to forecasting series"
-    apply_provider_filter = st.checkbox(st.checkbox_label, value=False)
-    df_for_fc = data["encounter_fact_df"].copy()
-    if apply_provider_filter and provider_col and len(sel_providers) > 0:
-        df_for_fc = df_for_fc[df_for_fc[provider_col].isin(sel_providers)]
-
-    ser = df_for_fc.groupby(df_for_fc["Date_of_Service"].dt.to_period("M"))["Encounter_Number"].count().sort_index()
-    ser.index = ser.index.astype('period[M]')  # monthly PeriodIndex
-
-    if len(ser) < 6:
-        st.warning("Not enough data points to build robust forecasts. Need at least ~6+ monthly points.")
-    else:
-        model_choices = ["Simple ETS", "Holt’s Linear", "Holt-Winters", "ARIMA"] + (["XGBoost"] if XGB_OK else [])
-        selected_models = st.multiselect("Select models to run/compare", options=model_choices, default=model_choices)
-
-        # Controls
-        c1, c2, c3 = st.columns(3)
-        with c1:
-            test_pct = st.number_input(
-                "Test size (% of total months)",
-                min_value=5,
-                max_value=35,
-                value=25,
-                step=5
-            )
-            # Convert percentage to months
-            test_size = max(1, int(round(len(ser) * test_pct / 100.0)))
-        with c2:
-            seasonal_periods = st.number_input("Seasonal periods (for Holt-Winters)", min_value=0, max_value=9, value=4)
-        with c3:
-            ar = st.number_input("ARIMA p", min_value=0, max_value=5, value=1)
-            d = st.number_input("ARIMA d", min_value=0, max_value=2, value=1)
-            ma = st.number_input("ARIMA q", min_value=0, max_value=5, value=1)
-
-        # Train/test split
-        n = len(ser)
-        split = max(1, n - test_size)
-        train = ser.iloc[:split]
-        test = ser.iloc[split:]
-
-        results = {}
-        metrics = {}
-
-        def add_metrics(name, y_true, y_pred):
-            mae = mean_absolute_error(y_true, y_pred)
-            #rmse = mean_squared_error(y_true, y_pred, squared=False)
-            rmse = np.sqrt(mean_squared_error(y_true, y_pred))  # manual sqrt
-            metrics[name] = {"MAE": mae, "RMSE": rmse}
-
-        # Simple ETS (SES)
-        if "Simple ETS" in selected_models:
-            m = SimpleExpSmoothing(train).fit()
-            pred = m.forecast(len(test))
-            results["Simple ETS"] = pred
-            add_metrics("Simple ETS", test.values, pred.values)
-
-        # Holt's Linear
-        if "Holt’s Linear" in selected_models:
-            m = Holt(train).fit()
-            pred = m.forecast(len(test))
-            results["Holt’s Linear"] = pred
-            add_metrics("Holt’s Linear", test.values, pred.values)
-
-        # Holt-Winters (Additive trend + optional seasonality)
-        if "Holt-Winters" in selected_models:
-            if seasonal_periods and seasonal_periods > 1:
-                m = ExponentialSmoothing(train, trend="add", seasonal="add", seasonal_periods=seasonal_periods).fit()
-            else:
-                m = ExponentialSmoothing(train, trend="add", seasonal=None).fit()
-            pred = m.forecast(len(test))
-            results["Holt-Winters"] = pred
-            add_metrics("Holt-Winters", test.values, pred.values)
-
-        # ARIMA
-        if "ARIMA" in selected_models:
-            m = ARIMA(train, order=(ar, d, ma)).fit()
-            pred = m.forecast(len(test))
-            pred.index = test.index
-            results["ARIMA"] = pred
-            add_metrics("ARIMA", test.values, pred.values)
-
-        # XGBoost: simple time index regressor
-        if "XGBoost" in selected_models and XGB_OK:
-            x_train = np.arange(len(train)).reshape(-1, 1)
-            x_test = np.arange(len(train), len(train) + len(test)).reshape(-1, 1)
-            xgb = XGBRegressor(n_estimators=300, learning_rate=0.05, max_depth=3, subsample=0.9, colsample_bytree=0.9, random_state=42)
-            xgb.fit(x_train, train.values)
-            pred_vals = xgb.predict(x_test)
-            pred = pd.Series(pred_vals, index=test.index)
-            results["XGBoost"] = pred
-            add_metrics("XGBoost", test.values, pred.values)
-
-        # Metrics table
-        if metrics:
-            metrics_df = pd.DataFrame(metrics).T.sort_values("RMSE")
-            st.markdown("#### Model performance (lower is better)")
-            st.dataframe(metrics_df.style.format({"MAE": "{:.2f}", "RMSE": "{:.2f}"}), use_container_width=True)
-
-        # Plot actual vs predictions
-        fig_fc = go.Figure()
-        fig_fc.add_trace(go.Scatter(x=train.index.to_timestamp(), y=train.values, mode="lines+markers", name="Train"))
-        if len(test) > 0:
-            fig_fc.add_trace(go.Scatter(x=test.index.to_timestamp(), y=test.values, mode="lines+markers", name="Actual (Test)", line=dict(width=3)))
-
-        for name, pred in results.items():
-            fig_fc.add_trace(go.Scatter(x=pred.index.to_timestamp(), y=pred.values, mode="lines+markers", name=f"Pred: {name}", line=dict(dash="dash")))
-        fig_fc.update_layout(title="Forecast comparison (holdout period)", xaxis_title="Month", yaxis_title="Encounters", height=700)
-        st.plotly_chart(fig_fc, use_container_width=True)
-
-        # Forecast to November 2020 from full series using best RMSE model
-        target_date = pd.Period("2020-11", freq="M")
-        best_name = None
-        if metrics:
-            best_name = metrics_df.index[0]
-            st.success(f"Best model by RMSE: **{best_name}**")
-
-        def refit_and_forecast_to_target(series: pd.Series, model_name: str) -> Optional[Tuple[float, Tuple[float, float]]]:
-            if len(series) == 0:
-                return None
-            
-            last_period = series.index[-1]
-            if target_date <= last_period:
-                val = float(series.loc[target_date])
-                return val, (val, val)  # CI = same if it's actual observed
-            
-            steps = (target_date.year - last_period.year) * 12 + (target_date.month - last_period.month)
-
-            f, ci = None, None
-
-            if model_name == "Simple ETS":
-                m = SimpleExpSmoothing(series).fit()
-                f = m.forecast(steps)
-                sigma = np.std(m.resid, ddof=1)
-                ci = pd.DataFrame({
-                    "lower": f - 1.96 * sigma,
-                    "upper": f + 1.96 * sigma
-                }, index=pd.period_range(start=last_period+1, periods=steps, freq="M"))
-
-            elif model_name == "Holt’s Linear":
-                m = Holt(series).fit()
-                f = m.forecast(steps)
-                sigma = np.std(m.resid, ddof=1)
-                ci = pd.DataFrame({
-                    "lower": f - 1.96 * sigma,
-                    "upper": f + 1.96 * sigma
-                }, index=pd.period_range(start=last_period+1, periods=steps, freq="M"))
-
-            elif model_name == "Holt-Winters":
-                if seasonal_periods and seasonal_periods > 1:
-                    m = ExponentialSmoothing(series, trend="add", seasonal="add", seasonal_periods=seasonal_periods).fit()
-                else:
-                    m = ExponentialSmoothing(series, trend="add", seasonal=None).fit()
-                f = m.forecast(steps)
-                sigma = np.std(m.resid, ddof=1)
-                ci = pd.DataFrame({
-                    "lower": f - 1.96 * sigma,
-                    "upper": f + 1.96 * sigma
-                }, index=pd.period_range(start=last_period+1, periods=steps, freq="M"))
-
-            elif model_name == "ARIMA":
-                m = ARIMA(series, order=(ar, d, ma)).fit()
-                res = m.get_forecast(steps)
-                f = res.predicted_mean
-                ci = res.conf_int(alpha=0.05)
-                f.index = pd.period_range(start=last_period+1, periods=steps, freq="M")
-                ci.index = f.index
-                # Fix: Rename columns to 'lower' and 'upper'
-                ci.columns = ["lower", "upper"]
-
-            elif model_name == "XGBoost" and XGB_OK:
-                x_all = np.arange(len(series)).reshape(-1, 1)
-                xgb = XGBRegressor(n_estimators=300, learning_rate=0.05, max_depth=3,
-                                   subsample=0.9, colsample_bytree=0.9, random_state=42)
-                xgb.fit(x_all, series.values)
-                x_future = np.arange(len(series), len(series) + steps).reshape(-1, 1)
-                f_vals = xgb.predict(x_future)
-                f = pd.Series(f_vals, index=pd.period_range(start=last_period+1, periods=steps, freq="M"))
-                ci = pd.DataFrame({
-                    "lower": f * 0.95,
-                    "upper": f * 1.05
-                }, index=f.index)
-
-            else:
-                return None
-
-            return float(f.loc[target_date]), (float(ci.loc[target_date, "lower"]), float(ci.loc[target_date, "upper"]))
-
-            
-        if best_name:
-            result = refit_and_forecast_to_target(ser, best_name)
-            
-            from scipy.stats import norm
-
-            if result is not None:
-                nov_pred, (lower, upper) = result
-
-                # Assume normal distribution
-                mean = nov_pred
-                std = (upper - lower) / (2 * 1.96)  # approximate std from 95% CI
-
-                # X values for the curve
-                x = np.linspace(mean - 4*std, mean + 4*std, 500)
-                y = norm.pdf(x, mean, std)
-
-                col1, col2 = st.columns([1, 2])  # adjust width ratio if needed
-
-                with col1:
-                    st.metric("Expected Encounters – November 2020", f"{nov_pred:.2f}")
-                    st.write(f"95% Prediction Interval: **{lower:.2f} – {upper:.2f}**")
-
-                with col2:
-                    # Create figure
-                    fig = go.Figure()
-
-                    # Plot normal curve
-                    fig.add_trace(go.Scatter(
-                        x=x, y=y, mode='lines', 
-                        name='Forecast',
-                        line=dict(color='skyblue'),
-                        hovertemplate='x: %{x:.2f}<br>y: %{y:.4f}<extra></extra>'
-                    ))
-
-                    # Vertical line for nov_pred
-                    fig.add_trace(go.Scatter(
-                        x=[nov_pred, nov_pred], y=[0, max(y)], 
-                        mode='lines', 
-                        line=dict(color='red', dash='dash'),
-                        name='Nov 2020 Forecast',
-                        hovertemplate='Forecast: %{x:.2f}<extra></extra>'
-                    ))
-
-                    # Shade 95% CI area
-                    mask = (x >= lower) & (x <= upper)
-                    fig.add_trace(go.Scatter(
-                        x=np.concatenate([x[mask], x[mask][::-1]]),
-                        y=np.concatenate([y[mask], np.zeros(sum(mask))]),
-                        fill='toself',
-                        fillcolor='rgba(135,206,250,0.3)',
-                        line=dict(color='rgba(255,255,255,0)'),
-                        hoverinfo='skip',
-                        showlegend=True,
-                        name='95% Confidence Interval'
-                    ))
-
-                    fig.update_layout(
-                        title="95% Prediction Interval",
-                        xaxis_title="Number of Encounters",
-                        yaxis_title="Probability Density",
-                        template="plotly_white",
-                        height=400
-                    )
-
-                    st.plotly_chart(fig, use_container_width=True)
-
-            else:
-                st.warning("Could not compute November 2020 forecast with the selected/best model.")
-        else:
-            st.info("Select and run at least one model to compute the November 2020 forecast.")
-
-
-
-        # ===================== Holt-Winters vs ETS Trend-Only Comparison =====================
-        st.markdown("#### Holt-Winters (Additive) vs ETS (Trend-Only) – Next 10 Months")
-
-        # Ensure DatetimeIndex for plotting
-        df_hw_ets = ser.copy()
-        if not isinstance(df_hw_ets.index, pd.DatetimeIndex):
-            df_hw_ets.index = df_hw_ets.index.to_timestamp()
-
-        # -------------------- Fit Models --------------------
-        hw_add_model = ExponentialSmoothing(
-            df_hw_ets,
-            trend='add',
-            seasonal='add',
-            seasonal_periods=seasonal_periods
-        ).fit()
-        hw_add_forecast = hw_add_model.forecast(steps=10)
-
-        ets_model = ExponentialSmoothing(
-            df_hw_ets,
-            trend='add',
-            seasonal=None
-        ).fit()
-        ets_forecast = ets_model.forecast(steps=10)
-
-        # -------------------- Future Dates --------------------
-        last_date = df_hw_ets.index[-1]
-        future_dates = pd.date_range(
-            start=last_date + pd.offsets.MonthBegin(1),
-            periods=10,
-            freq='MS'
-        )
-        hw_add_forecast.index = future_dates
-        ets_forecast.index = future_dates
-
-        # -------------------- Combine into table --------------------
-        forecast_df = pd.DataFrame({
-            'Historical': list(df_hw_ets.values) + [None]*10,
-            'HW Additive': [None]*len(df_hw_ets) + list(hw_add_forecast.round(2)),
-            'ETS Trend Only': [None]*len(df_hw_ets) + list(ets_forecast.round(2))
-        }, index=list(df_hw_ets.index) + list(future_dates))
-
-        st.dataframe(forecast_df, use_container_width=True)
-
-        # -------------------- Plot with Plotly --------------------
-        fig_comp = go.Figure()
-
-        # Historical
-        fig_comp.add_trace(go.Scatter(
-            x=df_hw_ets.index,
-            y=df_hw_ets.values,
-            mode="lines+markers",
-            name="Historical",
-            line=dict(color="white", width=2),
-            marker=dict(size=6)
-        ))
-
-        # Holt-Winters Additive
-        fig_comp.add_trace(go.Scatter(
-            x=hw_add_forecast.index,
-            y=hw_add_forecast.values,
-            mode="lines+markers",
-            name="Holt-Winters Additive",
-            line=dict(color="orange", width=2, dash="dash"),
-            marker=dict(symbol="diamond", size=8)
-        ))
-
-        # ETS Trend Only
-        fig_comp.add_trace(go.Scatter(
-            x=ets_forecast.index,
-            y=ets_forecast.values,
-            mode="lines+markers",
-            name="ETS Trend Only",
-            line=dict(color="red", width=2, dash="dash"),
-            marker=dict(symbol="triangle-up", size=8)
-        ))
-
-        # Highlight November 2020 predictions
-        nov_2020_ts = pd.Timestamp("2020-11-01")
-        if nov_2020_ts in hw_add_forecast.index:
-            fig_comp.add_trace(go.Scatter(
-                x=[nov_2020_ts],
-                y=[hw_add_forecast.loc[nov_2020_ts]],
-                mode="markers+text",
-                text=[f"HW: {hw_add_forecast.loc[nov_2020_ts]:.2f}"],
-                textposition="top center",
-                marker=dict(color="green", size=10),
-                name="Nov-2020 HW"
-            ))
-        if nov_2020_ts in ets_forecast.index:
-            fig_comp.add_trace(go.Scatter(
-                x=[nov_2020_ts],
-                y=[ets_forecast.loc[nov_2020_ts]],
-                mode="markers+text",
-                text=[f"ETS: {ets_forecast.loc[nov_2020_ts]:.2f}"],
-                textposition="top center",
-                marker=dict(color="purple", size=10),
-                name="Nov-2020 ETS"
-            ))
-
-        fig_comp.update_layout(
-            title="Monthly Encounter Forecast: Holt-Winters Additive vs ETS Trend Only",
-            xaxis_title="Month",
-            yaxis_title="Number of Encounters",
-            xaxis=dict(tickformat="%b-%Y"),
-            height=600
-        )
-
-        st.plotly_chart(fig_comp, use_container_width=True)
-
-
 # ===================================== Slide 3 =====================================
-with tab3:
+with tab2:
 
     display_patient_encounter_metrics(encounters_joined)
     
@@ -793,7 +417,7 @@ with tab3:
         st.warning("Patient_Age not available in joined encounters table.")
 
 # ===================================== Slide 4 =====================================
-with tab4:
+with tab3:
     st.subheader("Treatment-wise Unique Patient Counts by Age Group")
     # Build matrix: rows Treatment_ID, columns Age Groups, values distinct patients
     enc = encounters_joined.copy()
@@ -832,7 +456,7 @@ if not XGB_OK:
     st.caption("⚠️ XGBoost not installed – the XGBoost option is hidden. Install `xgboost` to enable it.")
 
 # ===================================== Slide 5 =====================================
-with tab5:
+with tab4:
     st.subheader("Overview of Uploaded DataFrames")
     
     # st.write("HR Testing Area")

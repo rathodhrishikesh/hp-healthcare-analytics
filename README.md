@@ -54,14 +54,14 @@ Check out the live app here: [HP Healthcare Analytics](https://hp-healthcare-ana
 ---
 ## 🖼 Screenshots
 
-### 1️⃣ Patient Encounters
+### 1️⃣ Demographics & Key Insights
+![Demographics Insights](screenshots/3-demographics.png)
+
+### 2️⃣ Patient Encounters
 ![Encounters Breakdown](screenshots/1-encounters.png)
 
-### 2️⃣ Time Series Forecasting
+### 3️⃣ Time Series Forecasting
 ![Time Series Forecasting](screenshots/2-forecast.png)
-
-### 3️⃣ Demographics & Key Insights
-![Demographics Insights](screenshots/3-demographics.png)
 
 ---
 

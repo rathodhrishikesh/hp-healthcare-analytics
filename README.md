@@ -24,26 +24,22 @@ Check out the live app here: [HP Healthcare Analytics](https://hp-healthcare-ana
 ## 🗂 Overview of Uploaded DataFrames
 
 ### Dim.Treatment
-- **Shape:** 10 rows × 2 columns  
 - **Columns:**
   1. `Treatment_ID`
   2. `Treatment_Desc`
 
 ### Dim.Physician
-- **Shape:** 5 rows × 2 columns  
 - **Columns:**
   1. `Physician_ID`
   2. `Specialty`
 
 ### Dim.Patient
-- **Shape:** 172 rows × 3 columns  
 - **Columns:**
   1. `Patient_ID`
   2. `Patient_Age`
   3. `Gender_at_Birth`
 
 ### EncounterFact
-- **Shape:** 5451 rows × 5 columns  
 - **Columns:**
   1. `Encounter_Number`
   2. `Date_of_Service`

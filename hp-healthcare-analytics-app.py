@@ -63,20 +63,35 @@ DEFAULT_PATH = PUBLIC_DIR / "Hospital-Encounters-Test-Data.xlsx"
 @st.cache_data(show_spinner=True)
 def parse_dataframes_from_path(path: str):
     excel_file = pd.ExcelFile(path)
-    dim_treatment_df = excel_file.parse(sheet_name='Dimensions', skiprows=8, nrows=10, usecols='B:C')
-    dim_physician_df = excel_file.parse(sheet_name='Dimensions', skiprows=8, nrows=5, usecols='E:F')
-    dim_patient_df   = excel_file.parse(sheet_name='Dimensions', skiprows=8, usecols='H:J')
-    encounter_fact_df= excel_file.parse(sheet_name='Fact Table', skiprows=2, usecols='B:F')
+    dim_treatment_df   = read_until_blank(excel_file, 'Dimensions', skiprows=8, usecols='B:C')
+    dim_physician_df   = read_until_blank(excel_file, 'Dimensions', skiprows=8, usecols='E:F')
+    dim_patient_df     = read_until_blank(excel_file, 'Dimensions', skiprows=8, usecols='H:J')
+    encounter_fact_df  = read_until_blank(excel_file, 'Fact Table', skiprows=2, usecols='B:F')
+
     return dim_treatment_df, dim_physician_df, dim_patient_df, encounter_fact_df
 
 @st.cache_data(show_spinner=True)
 def parse_dataframes_from_bytes(file_bytes: bytes):
     excel_file = pd.ExcelFile(io.BytesIO(file_bytes))
-    dim_treatment_df = excel_file.parse(sheet_name='Dimensions', skiprows=8, nrows=10, usecols='B:C')
-    dim_physician_df = excel_file.parse(sheet_name='Dimensions', skiprows=8, nrows=5, usecols='E:F')
-    dim_patient_df   = excel_file.parse(sheet_name='Dimensions', skiprows=8, usecols='H:J')
-    encounter_fact_df= excel_file.parse(sheet_name='Fact Table', skiprows=2, usecols='B:F')
+    dim_treatment_df   = read_until_blank(excel_file, 'Dimensions', skiprows=8, usecols='B:C')
+    dim_physician_df   = read_until_blank(excel_file, 'Dimensions', skiprows=8, usecols='E:F')
+    dim_patient_df     = read_until_blank(excel_file, 'Dimensions', skiprows=8, usecols='H:J')
+    encounter_fact_df  = read_until_blank(excel_file, 'Fact Table', skiprows=2, usecols='B:F')
+
     return dim_treatment_df, dim_physician_df, dim_patient_df, encounter_fact_df
+    
+def read_until_blank(excel_file, sheet_name, skiprows, usecols):
+    # Read everything first
+    df = excel_file.parse(sheet_name=sheet_name, skiprows=skiprows, usecols=usecols)
+
+    # Find first blank row (all NaN)
+    blank_idx = df[df.isna().all(axis=1)].index.min()
+
+    # If found, slice up to row before it
+    if not pd.isna(blank_idx):
+        df = df.iloc[:blank_idx]
+
+    return df
 
 @st.cache_data(show_spinner=False)
 def get_filtered_encounters(encounter_fact_df, dim_patient_df, dim_treatment_df, sel_providers, sel_treatments, provider_col, treat_col):

@@ -1,6 +1,6 @@
 # Healthcare Analytics – Patient Encounters & Forecasts
 
-A **dynamic app** for interactive exploration of patient encounters and treatment trends. Users can filter by providers and treatments, visualize demographic insights, and track time series trends and forecasts for key metrics, all in an intuitive dashboard interface.
+A **dynamic app** that enables interactive exploration of patient encounters and treatment trends. Users can filter by providers and treatments, visualize demographic insights, and track time series trends and forecasts for key metrics, all in an intuitive dashboard interface.
 
 ---
 
@@ -24,26 +24,22 @@ Check out the live app here: [HP Healthcare Analytics](https://hp-healthcare-ana
 ## 🗂 Overview of Uploaded DataFrames
 
 ### Dim.Treatment
-- **Shape:** 10 rows × 2 columns  
 - **Columns:**
   1. `Treatment_ID`
   2. `Treatment_Desc`
 
 ### Dim.Physician
-- **Shape:** 5 rows × 2 columns  
 - **Columns:**
   1. `Physician_ID`
   2. `Specialty`
 
 ### Dim.Patient
-- **Shape:** 172 rows × 3 columns  
 - **Columns:**
   1. `Patient_ID`
   2. `Patient_Age`
   3. `Gender_at_Birth`
 
 ### EncounterFact
-- **Shape:** 5451 rows × 5 columns  
 - **Columns:**
   1. `Encounter_Number`
   2. `Date_of_Service`
@@ -54,14 +50,14 @@ Check out the live app here: [HP Healthcare Analytics](https://hp-healthcare-ana
 ---
 ## 🖼 Screenshots
 
-### 1️⃣ Patient Encounters
+### 1️⃣ Demographics & Key Insights
+![Demographics Insights](screenshots/3-demographics.png)
+
+### 2️⃣ Patient Encounters
 ![Encounters Breakdown](screenshots/1-encounters.png)
 
-### 2️⃣ Time Series Forecasting
+### 3️⃣ Time Series Forecasting
 ![Time Series Forecasting](screenshots/2-forecast.png)
-
-### 3️⃣ Demographics & Key Insights
-![Demographics Insights](screenshots/3-demographics.png)
 
 ---
 
